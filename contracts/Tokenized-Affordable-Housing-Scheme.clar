@@ -7,9 +7,13 @@
 (define-constant err-invalid-amount (err u105))
 (define-constant err-milestone-not-ready (err u106))
 (define-constant err-unit-not-available (err u107))
+(define-constant err-voting-period-active (err u108))
+(define-constant err-already-voted (err u109))
+(define-constant err-request-not-approved (err u110))
 
 (define-data-var next-unit-id uint u1)
 (define-data-var next-milestone-id uint u1)
+(define-data-var next-maintenance-request-id uint u1)
 (define-data-var dao-fund uint u0)
 
 (define-map housing-units
@@ -56,6 +60,34 @@
   { balance: uint }
 )
 
+(define-map maintenance-funds
+  { unit-id: uint }
+  {
+    total-fund: uint,
+    monthly-allocation-percentage: uint
+  }
+)
+
+(define-map maintenance-requests
+  { request-id: uint }
+  {
+    unit-id: uint,
+    requester: principal,
+    description: (string-ascii 200),
+    amount: uint,
+    votes-for: uint,
+    votes-against: uint,
+    voting-deadline: uint,
+    is-approved: bool,
+    is-executed: bool
+  }
+)
+
+(define-map maintenance-votes
+  { request-id: uint, voter: principal }
+  { vote: bool }
+)
+
 (define-public (create-housing-unit (total-tokens uint) (rent-per-token uint) (monthly-rent uint))
   (let ((unit-id (var-get next-unit-id)))
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
@@ -70,6 +102,13 @@
         construction-status: "planning",
         monthly-rent: monthly-rent,
         is-available: true
+      }
+    )
+    (map-set maintenance-funds
+      { unit-id: unit-id }
+      {
+        total-fund: u0,
+        monthly-allocation-percentage: u10
       }
     )
     (var-set next-unit-id (+ unit-id u1))
@@ -178,20 +217,31 @@
 )
 
 (define-public (deposit-rental-income (unit-id uint) (month uint) (amount uint))
-  (begin
+  (let (
+    (maintenance-fund (unwrap! (map-get? maintenance-funds { unit-id: unit-id }) err-not-found))
+    (maintenance-allocation (/ (* amount (get monthly-allocation-percentage maintenance-fund)) u100))
+    (remaining-income (- amount maintenance-allocation))
+  )
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
     (asserts! (is-some (map-get? housing-units { unit-id: unit-id })) err-not-found)
     (asserts! (> amount u0) err-invalid-amount)
     
+    (map-set maintenance-funds
+      { unit-id: unit-id }
+      (merge maintenance-fund { 
+        total-fund: (+ (get total-fund maintenance-fund) maintenance-allocation) 
+      })
+    )
+    
     (map-set rental-income
       { unit-id: unit-id, month: month }
       {
-        total-income: amount,
+        total-income: remaining-income,
         distributed: false,
         distribution-date: u0
       }
     )
-    (ok amount)
+    (ok remaining-income)
   )
 )
 
@@ -281,6 +331,131 @@
   (map-get? user-balances { user: user })
 )
 
+(define-public (contribute-to-maintenance (unit-id uint) (amount uint))
+  (let (
+    (maintenance-fund (unwrap! (map-get? maintenance-funds { unit-id: unit-id }) err-not-found))
+    (user-balance (default-to { balance: u0 } (map-get? user-balances { user: tx-sender })))
+  )
+    (asserts! (>= (get balance user-balance) amount) err-insufficient-funds)
+    (asserts! (> amount u0) err-invalid-amount)
+    
+    (map-set user-balances
+      { user: tx-sender }
+      { balance: (- (get balance user-balance) amount) }
+    )
+    
+    (map-set maintenance-funds
+      { unit-id: unit-id }
+      (merge maintenance-fund { 
+        total-fund: (+ (get total-fund maintenance-fund) amount) 
+      })
+    )
+    
+    (ok amount)
+  )
+)
+
+(define-public (request-maintenance-funds (unit-id uint) (description (string-ascii 200)) (amount uint))
+  (let ((request-id (var-get next-maintenance-request-id)))
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (is-some (map-get? housing-units { unit-id: unit-id })) err-not-found)
+    (asserts! (> amount u0) err-invalid-amount)
+    
+    (map-set maintenance-requests
+      { request-id: request-id }
+      {
+        unit-id: unit-id,
+        requester: tx-sender,
+        description: description,
+        amount: amount,
+        votes-for: u0,
+        votes-against: u0,
+        voting-deadline: (+ stacks-block-height u144),
+        is-approved: false,
+        is-executed: false
+      }
+    )
+    (var-set next-maintenance-request-id (+ request-id u1))
+    (ok request-id)
+  )
+)
+
+(define-public (vote-on-maintenance (request-id uint) (vote bool))
+  (let (
+    (request (unwrap! (map-get? maintenance-requests { request-id: request-id }) err-not-found))
+    (unit-id (get unit-id request))
+    (ownership (unwrap! (map-get? token-ownership { unit-id: unit-id, owner: tx-sender }) err-not-found))
+    (existing-vote (map-get? maintenance-votes { request-id: request-id, voter: tx-sender }))
+  )
+    (asserts! (> (get tokens ownership) u0) err-unauthorized)
+    (asserts! (< stacks-block-height (get voting-deadline request)) err-voting-period-active)
+    (asserts! (is-none existing-vote) err-already-voted)
+    
+    (map-set maintenance-votes
+      { request-id: request-id, voter: tx-sender }
+      { vote: vote }
+    )
+    
+    (if vote
+      (map-set maintenance-requests
+        { request-id: request-id }
+        (merge request { votes-for: (+ (get votes-for request) (get tokens ownership)) })
+      )
+      (map-set maintenance-requests
+        { request-id: request-id }
+        (merge request { votes-against: (+ (get votes-against request) (get tokens ownership)) })
+      )
+    )
+    (ok vote)
+  )
+)
+
+(define-public (execute-maintenance-request (request-id uint))
+  (let (
+    (request (unwrap! (map-get? maintenance-requests { request-id: request-id }) err-not-found))
+    (unit-id (get unit-id request))
+    (unit (unwrap! (map-get? housing-units { unit-id: unit-id }) err-not-found))
+    (maintenance-fund (unwrap! (map-get? maintenance-funds { unit-id: unit-id }) err-not-found))
+    (total-tokens (get total-tokens unit))
+    (approval-threshold (/ (* total-tokens u51) u100))
+  )
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (>= stacks-block-height (get voting-deadline request)) err-voting-period-active)
+    (asserts! (not (get is-executed request)) err-unauthorized)
+    (asserts! (> (get votes-for request) approval-threshold) err-request-not-approved)
+    (asserts! (>= (get total-fund maintenance-fund) (get amount request)) err-insufficient-funds)
+    
+    (map-set maintenance-funds
+      { unit-id: unit-id }
+      (merge maintenance-fund { 
+        total-fund: (- (get total-fund maintenance-fund) (get amount request)) 
+      })
+    )
+    
+    (map-set maintenance-requests
+      { request-id: request-id }
+      (merge request { 
+        is-approved: true,
+        is-executed: true
+      })
+    )
+    
+    (ok (get amount request))
+  )
+)
+
 (define-read-only (get-dao-fund)
   (var-get dao-fund)
+)
+
+(define-read-only (get-maintenance-fund (unit-id uint))
+  (map-get? maintenance-funds { unit-id: unit-id })
+)
+
+(define-read-only (get-maintenance-request (request-id uint))
+  (map-get? maintenance-requests { request-id: request-id })
+)
+
+(define-read-only (get-maintenance-vote (request-id uint) (voter principal))
+  (map-get? maintenance-votes { request-id: request-id, voter: voter })
 )
