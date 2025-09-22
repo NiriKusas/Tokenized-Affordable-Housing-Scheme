@@ -8,9 +8,10 @@ This project solves housing accessibility for low-income families by tokenizing 
 
 - 🏘️ **Fractional NFT Ownership** - Buy portions of housing units with tokens
 - 💰 **Rental Income Sharing** - Earn passive income based on token ownership
-- 🚧 **Construction Milestones** - Transparent project development tracking  
+- 🚧 **Construction Milestones** - Transparent project development tracking
 - 📊 **Smart Rent Contracts** - Automated rental income distribution
 - 🗳️ **Community DAO Governance** - Collective decision making
+- 🔄 **Token Resale Mechanism** - Decentralized secondary market for token trading
 
 ## 🚀 Quick Start
 
@@ -36,6 +37,9 @@ clarinet console
 - `create-housing-unit` - Create new tokenized housing unit
 - `buy-tokens` - Purchase fractional ownership tokens
 - `transfer-tokens` - Transfer tokens between users
+- `list-tokens-for-sale` - List tokens for resale at specified price
+- `buy-listed-tokens` - Purchase tokens from resale listings
+- `cancel-token-listing` - Remove token listing from market
 
 ### 🏗️ Construction Tracking
 - `create-milestone` - Set development milestones
@@ -52,6 +56,7 @@ clarinet console
 - `get-token-ownership` - Check ownership amount
 - `get-milestone` - View milestone status
 - `get-user-balance` - Check withdrawable balance
+- `get-token-listing` - View resale listing details
 
 ## 💡 Usage Examples
 
@@ -68,6 +73,11 @@ clarinet console
 ### Creating Construction Milestone
 ```clarity
 (contract-call? .housing-scheme create-milestone u1 "Foundation Complete" u50000)
+```
+
+### Listing Tokens for Resale
+```clarity
+(contract-call? .housing-scheme list-tokens-for-sale u1 u50 u60)
 ```
 
 ## 🔐 Security Features

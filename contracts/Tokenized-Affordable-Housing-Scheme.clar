@@ -14,6 +14,7 @@
 (define-data-var next-unit-id uint u1)
 (define-data-var next-milestone-id uint u1)
 (define-data-var next-maintenance-request-id uint u1)
+(define-data-var next-listing-id uint u1)
 (define-data-var dao-fund uint u0)
 
 (define-map housing-units
@@ -86,6 +87,16 @@
 (define-map maintenance-votes
   { request-id: uint, voter: principal }
   { vote: bool }
+)
+
+(define-map token-listings
+  { listing-id: uint }
+  {
+    unit-id: uint,
+    seller: principal,
+    tokens: uint,
+    price-per-token: uint
+  }
 )
 
 (define-public (create-housing-unit (total-tokens uint) (rent-per-token uint) (monthly-rent uint))
@@ -458,4 +469,69 @@
 
 (define-read-only (get-maintenance-vote (request-id uint) (voter principal))
   (map-get? maintenance-votes { request-id: request-id, voter: voter })
+)
+
+(define-public (list-tokens-for-sale (unit-id uint) (tokens uint) (price-per-token uint))
+  (let (
+    (listing-id (var-get next-listing-id))
+    (ownership (unwrap! (map-get? token-ownership { unit-id: unit-id, owner: tx-sender }) err-not-found))
+  )
+    (asserts! (>= (get tokens ownership) tokens) err-insufficient-funds)
+    (asserts! (> tokens u0) err-invalid-amount)
+    (asserts! (> price-per-token u0) err-invalid-amount)
+    (map-set token-listings
+      { listing-id: listing-id }
+      {
+        unit-id: unit-id,
+        seller: tx-sender,
+        tokens: tokens,
+        price-per-token: price-per-token
+      }
+    )
+    (var-set next-listing-id (+ listing-id u1))
+    (ok listing-id)
+  )
+)
+
+(define-public (buy-listed-tokens (listing-id uint) (tokens-to-buy uint))
+  (let (
+    (listing (unwrap! (map-get? token-listings { listing-id: listing-id }) err-not-found))
+    (unit-id (get unit-id listing))
+    (seller (get seller listing))
+    (total-price (* tokens-to-buy (get price-per-token listing)))
+    (buyer-ownership (default-to { tokens: u0 } (map-get? token-ownership { unit-id: unit-id, owner: tx-sender })))
+    (seller-ownership (unwrap! (map-get? token-ownership { unit-id: unit-id, owner: seller }) err-not-found))
+  )
+    (asserts! (>= (get tokens listing) tokens-to-buy) err-insufficient-funds)
+    (asserts! (> tokens-to-buy u0) err-invalid-amount)
+    (try! (stx-transfer? total-price tx-sender seller))
+    (map-set token-ownership
+      { unit-id: unit-id, owner: tx-sender }
+      { tokens: (+ (get tokens buyer-ownership) tokens-to-buy) }
+    )
+    (map-set token-ownership
+      { unit-id: unit-id, owner: seller }
+      { tokens: (- (get tokens seller-ownership) tokens-to-buy) }
+    )
+    (if (is-eq (- (get tokens listing) tokens-to-buy) u0)
+      (map-delete token-listings { listing-id: listing-id })
+      (map-set token-listings
+        { listing-id: listing-id }
+        (merge listing { tokens: (- (get tokens listing) tokens-to-buy) })
+      )
+    )
+    (ok tokens-to-buy)
+  )
+)
+
+(define-public (cancel-token-listing (listing-id uint))
+  (let ((listing (unwrap! (map-get? token-listings { listing-id: listing-id }) err-not-found)))
+    (asserts! (is-eq tx-sender (get seller listing)) err-unauthorized)
+    (map-delete token-listings { listing-id: listing-id })
+    (ok true)
+  )
+)
+
+(define-read-only (get-token-listing (listing-id uint))
+  (map-get? token-listings { listing-id: listing-id })
 )
