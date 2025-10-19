@@ -99,6 +99,11 @@
   }
 )
 
+(define-map insurance-pools
+  { unit-id: uint }
+  { total-pool: uint }
+)
+
 (define-public (create-housing-unit (total-tokens uint) (rent-per-token uint) (monthly-rent uint))
   (let ((unit-id (var-get next-unit-id)))
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
@@ -121,6 +126,10 @@
         total-fund: u0,
         monthly-allocation-percentage: u10
       }
+    )
+    (map-set insurance-pools
+      { unit-id: unit-id }
+      { total-pool: u0 }
     )
     (var-set next-unit-id (+ unit-id u1))
     (ok unit-id)
@@ -534,4 +543,27 @@
 
 (define-read-only (get-token-listing (listing-id uint))
   (map-get? token-listings { listing-id: listing-id })
+)
+
+(define-public (contribute-to-insurance (unit-id uint) (amount uint))
+  (let (
+    (insurance-pool (unwrap! (map-get? insurance-pools { unit-id: unit-id }) err-not-found))
+    (user-balance (default-to { balance: u0 } (map-get? user-balances { user: tx-sender })))
+  )
+    (asserts! (>= (get balance user-balance) amount) err-insufficient-funds)
+    (asserts! (> amount u0) err-invalid-amount)
+    (map-set user-balances
+      { user: tx-sender }
+      { balance: (- (get balance user-balance) amount) }
+    )
+    (map-set insurance-pools
+      { unit-id: unit-id }
+      { total-pool: (+ (get total-pool insurance-pool) amount) }
+    )
+    (ok amount)
+  )
+)
+
+(define-read-only (get-insurance-pool (unit-id uint))
+  (map-get? insurance-pools { unit-id: unit-id })
 )

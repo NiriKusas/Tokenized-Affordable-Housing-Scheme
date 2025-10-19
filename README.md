@@ -12,6 +12,7 @@ This project solves housing accessibility for low-income families by tokenizing 
 - 📊 **Smart Rent Contracts** - Automated rental income distribution
 - 🗳️ **Community DAO Governance** - Collective decision making
 - 🔄 **Token Resale Mechanism** - Decentralized secondary market for token trading
+- 🛡️ **Unit Insurance Pool** - Community-funded insurance for housing units to mitigate unexpected costs
 
 ## 🚀 Quick Start
 
@@ -40,6 +41,7 @@ clarinet console
 - `list-tokens-for-sale` - List tokens for resale at specified price
 - `buy-listed-tokens` - Purchase tokens from resale listings
 - `cancel-token-listing` - Remove token listing from market
+- `contribute-to-insurance` - Contribute to unit insurance pool
 
 ### 🏗️ Construction Tracking
 - `create-milestone` - Set development milestones
@@ -57,6 +59,7 @@ clarinet console
 - `get-milestone` - View milestone status
 - `get-user-balance` - Check withdrawable balance
 - `get-token-listing` - View resale listing details
+- `get-insurance-pool` - Check insurance pool amount for a unit
 
 ## 💡 Usage Examples
 
@@ -78,6 +81,11 @@ clarinet console
 ### Listing Tokens for Resale
 ```clarity
 (contract-call? .housing-scheme list-tokens-for-sale u1 u50 u60)
+```
+
+### Contributing to Insurance Pool
+```clarity
+(contract-call? .housing-scheme contribute-to-insurance u1 u100)
 ```
 
 ## 🔐 Security Features
