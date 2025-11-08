@@ -15,6 +15,7 @@
 (define-data-var next-milestone-id uint u1)
 (define-data-var next-maintenance-request-id uint u1)
 (define-data-var next-listing-id uint u1)
+(define-data-var next-claim-id uint u1)
 (define-data-var dao-fund uint u0)
 
 (define-map housing-units
@@ -102,6 +103,18 @@
 (define-map insurance-pools
   { unit-id: uint }
   { total-pool: uint }
+)
+
+(define-map insurance-claims
+  { claim-id: uint }
+  {
+    unit-id: uint,
+    claimant: principal,
+    amount: uint,
+    description: (string-ascii 200),
+    is-approved: bool,
+    is-paid: bool
+  }
 )
 
 (define-public (create-housing-unit (total-tokens uint) (rent-per-token uint) (monthly-rent uint))
@@ -566,4 +579,72 @@
 
 (define-read-only (get-insurance-pool (unit-id uint))
   (map-get? insurance-pools { unit-id: unit-id })
+)
+
+(define-public (file-insurance-claim (unit-id uint) (amount uint) (description (string-ascii 200)))
+  (let ((claim-id (var-get next-claim-id)))
+    (asserts! (is-some (map-get? housing-units { unit-id: unit-id })) err-not-found)
+    (asserts! (> amount u0) err-invalid-amount)
+    (map-set insurance-claims
+      { claim-id: claim-id }
+      {
+        unit-id: unit-id,
+        claimant: tx-sender,
+        amount: amount,
+        description: description,
+        is-approved: false,
+        is-paid: false
+      }
+    )
+    (var-set next-claim-id (+ claim-id u1))
+    (ok claim-id)
+  )
+)
+
+(define-public (approve-insurance-claim (claim-id uint))
+  (let (
+    (claim (unwrap! (map-get? insurance-claims { claim-id: claim-id }) err-not-found))
+    (unit-id (get unit-id claim))
+    (insurance-pool (unwrap! (map-get? insurance-pools { unit-id: unit-id }) err-not-found))
+  )
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (not (get is-approved claim)) err-already-exists)
+    (asserts! (>= (get total-pool insurance-pool) (get amount claim)) err-insufficient-funds)
+    (map-set insurance-claims
+      { claim-id: claim-id }
+      (merge claim { is-approved: true })
+    )
+    (ok true)
+  )
+)
+
+(define-public (pay-insurance-claim (claim-id uint))
+  (let (
+    (claim (unwrap! (map-get? insurance-claims { claim-id: claim-id }) err-not-found))
+    (unit-id (get unit-id claim))
+    (insurance-pool (unwrap! (map-get? insurance-pools { unit-id: unit-id }) err-not-found))
+    (claimant-balance (default-to { balance: u0 } (map-get? user-balances { user: (get claimant claim) })))
+  )
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (asserts! (get is-approved claim) err-request-not-approved)
+    (asserts! (not (get is-paid claim)) err-already-exists)
+    (asserts! (>= (get total-pool insurance-pool) (get amount claim)) err-insufficient-funds)
+    (map-set insurance-pools
+      { unit-id: unit-id }
+      { total-pool: (- (get total-pool insurance-pool) (get amount claim)) }
+    )
+    (map-set user-balances
+      { user: (get claimant claim) }
+      { balance: (+ (get balance claimant-balance) (get amount claim)) }
+    )
+    (map-set insurance-claims
+      { claim-id: claim-id }
+      (merge claim { is-paid: true })
+    )
+    (ok (get amount claim))
+  )
+)
+
+(define-read-only (get-insurance-claim (claim-id uint))
+  (map-get? insurance-claims { claim-id: claim-id })
 )

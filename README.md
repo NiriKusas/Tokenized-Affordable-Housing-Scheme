@@ -13,6 +13,7 @@ This project solves housing accessibility for low-income families by tokenizing 
 - 🗳️ **Community DAO Governance** - Collective decision making
 - 🔄 **Token Resale Mechanism** - Decentralized secondary market for token trading
 - 🛡️ **Unit Insurance Pool** - Community-funded insurance for housing units to mitigate unexpected costs
+- 📋 **Insurance Claims System** - File, approve, and process insurance claims for covered damages
 
 ## 🚀 Quick Start
 
@@ -42,6 +43,9 @@ clarinet console
 - `buy-listed-tokens` - Purchase tokens from resale listings
 - `cancel-token-listing` - Remove token listing from market
 - `contribute-to-insurance` - Contribute to unit insurance pool
+- `file-insurance-claim` - Submit insurance claim for damages
+- `approve-insurance-claim` - Approve submitted insurance claims
+- `pay-insurance-claim` - Process approved claims and distribute funds
 
 ### 🏗️ Construction Tracking
 - `create-milestone` - Set development milestones
@@ -60,6 +64,7 @@ clarinet console
 - `get-user-balance` - Check withdrawable balance
 - `get-token-listing` - View resale listing details
 - `get-insurance-pool` - Check insurance pool amount for a unit
+- `get-insurance-claim` - View insurance claim details
 
 ## 💡 Usage Examples
 
@@ -86,6 +91,11 @@ clarinet console
 ### Contributing to Insurance Pool
 ```clarity
 (contract-call? .housing-scheme contribute-to-insurance u1 u100)
+```
+
+### Filing Insurance Claim
+```clarity
+(contract-call? .housing-scheme file-insurance-claim u1 u500 "Water damage from burst pipe")
 ```
 
 ## 🔐 Security Features
