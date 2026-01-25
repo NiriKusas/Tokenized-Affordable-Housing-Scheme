@@ -17,6 +17,9 @@
 (define-data-var next-listing-id uint u1)
 (define-data-var next-claim-id uint u1)
 (define-data-var dao-fund uint u0)
+(define-data-var staking-reward-pool uint u0)
+(define-data-var total-staked-tokens uint u0)
+(define-constant staking-reward-rate u1)
 
 (define-map housing-units
   { unit-id: uint }
@@ -114,6 +117,14 @@
     description: (string-ascii 200),
     is-approved: bool,
     is-paid: bool
+  }
+)
+
+(define-map staking-info
+  { user: principal }
+  {
+    staked-tokens: uint,
+    staking-start: uint
   }
 )
 

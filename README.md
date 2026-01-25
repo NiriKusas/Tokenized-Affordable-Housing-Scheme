@@ -14,6 +14,7 @@ This project solves housing accessibility for low-income families by tokenizing 
 - 🔄 **Token Resale Mechanism** - Decentralized secondary market for token trading
 - 🛡️ **Unit Insurance Pool** - Community-funded insurance for housing units to mitigate unexpected costs
 - 📋 **Insurance Claims System** - File, approve, and process insurance claims for covered damages
+- 🔒 **Token Staking Rewards** - Stake tokens to earn passive rewards from the staking pool
 
 ## 🚀 Quick Start
 
